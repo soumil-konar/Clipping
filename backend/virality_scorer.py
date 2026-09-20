@@ -4,10 +4,11 @@ import re
 from typing import List, Dict, Any, Optional
 from google import genai
 from google.genai import types
+from backend.config import GEMINI_API_KEY
 
 class ViralityScorer:
     def __init__(self, api_key: Optional[str] = None):
-        self.api_key = api_key or os.environ.get("GEMINI_API_KEY")
+        self.api_key = api_key or os.environ.get("GEMINI_API_KEY") or GEMINI_API_KEY
         self.client = None
         if self.api_key:
             try:
@@ -77,14 +78,24 @@ Transcript:
 {transcript_text[:35000]}
 """
 
-        response = self.client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                temperature=0.4
-            )
-        )
+        response = None
+        for model_name in ["gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.6-flash"]:
+            try:
+                response = self.client.models.generate_content(
+                    model=model_name,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                        temperature=0.4
+                    )
+                )
+                if response and response.text:
+                    break
+            except Exception as e:
+                print(f"Model {model_name} failed: {e}")
+
+        if not response or not response.text:
+            return []
 
         raw_json = response.text.strip()
         data = json.loads(raw_json)

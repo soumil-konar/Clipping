@@ -13,6 +13,13 @@ fi
 # Activate venv
 source .venv/bin/activate
 
+# Load environment variables from .env if present
+if [ -f ".env" ]; then
+    set -a
+    source .env
+    set +a
+fi
+
 # Check if port 8000 is occupied
 PORT=${PORT:-8000}
 echo "Starting ClipForge Studio on http://localhost:$PORT ..."
