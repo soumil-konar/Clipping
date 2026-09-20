@@ -78,8 +78,8 @@ Transcript:
 {transcript_text[:35000]}
 """
 
-        response = None
-        for model_name in ["gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.6-flash"]:
+        # Prioritize gemini-3.5-flash-lite (500 RPD on free tier vs 20 RPD on standard flash)
+        for model_name in ["gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-3.8-flash", "gemini-3.6-flash"]:
             try:
                 response = self.client.models.generate_content(
                     model=model_name,
