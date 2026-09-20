@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual Environment
+.venv/
+venv/
+ENV/
+env/
+
+# Project Storage & Downloads
+storage/downloads/*
+storage/clips/*
+storage/exports/*
+!storage/downloads/.gitkeep
+!storage/clips/.gitkeep
+!storage/exports/.gitkeep
+
+# Environment Variables & Keys
+.env
+.env.*
+*.local
+key.txt
+*key*.txt
+
+# Logs
+*.log
+
+# OS / Editor
+.DS_Store
+.idea/
+.vscode/
