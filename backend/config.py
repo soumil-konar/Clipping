@@ -37,3 +37,47 @@ DEFAULT_VIDEO_CODEC = os.environ.get("VIDEO_CODEC", "h264_nvenc")
 DEFAULT_WIDTH = 1080
 DEFAULT_HEIGHT = 1920
 DEFAULT_FPS = 30
+
+# Social Platform Profiles (tailored bitrates, color spaces, and safe zones)
+PLATFORM_PROFILES = {
+    "instagram": {
+        "name": "Instagram Reels",
+        "video_bitrate": "4500k",
+        "maxrate": "5500k",
+        "bufsize": "6000k",
+        "audio_bitrate": "192k",
+        "fps": 30,
+        "gop": 60,
+        "margin_v": 540,      # Avoids Instagram bottom caption & audio title
+        "margin_r": 150,      # Avoids Instagram right-side like/comment column
+        "margin_l": 70,
+        "color_profile": "bt709"
+    },
+    "tiktok": {
+        "name": "TikTok",
+        "video_bitrate": "5500k",
+        "maxrate": "6500k",
+        "bufsize": "8000k",
+        "audio_bitrate": "192k",
+        "fps": 30,
+        "gop": 60,
+        "margin_v": 490,
+        "margin_r": 130,
+        "margin_l": 60,
+        "color_profile": "bt709"
+    },
+    "youtube_shorts": {
+        "name": "YouTube Shorts",
+        "video_bitrate": "8000k",
+        "maxrate": "10000k",
+        "bufsize": "12000k",
+        "audio_bitrate": "256k",
+        "fps": 30,
+        "gop": 60,
+        "margin_v": 460,
+        "margin_r": 110,
+        "margin_l": 60,
+        "color_profile": "bt709"
+    }
+}
+

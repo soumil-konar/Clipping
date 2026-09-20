@@ -4,7 +4,7 @@ import shutil
 from pathlib import Path
 from typing import Optional, Tuple
 import cv2
-from backend.config import CLIPS_DIR, EXPORTS_DIR, DEFAULT_VIDEO_CODEC
+from backend.config import CLIPS_DIR, EXPORTS_DIR, DEFAULT_VIDEO_CODEC, PLATFORM_PROFILES
 
 def detect_face_x_center(video_path: Path, sample_seconds: float = 5.0) -> float:
     """
@@ -85,13 +85,24 @@ class VideoEditor:
         layout_mode: str = "blur_bg",  # "blur_bg", "smart_crop", "split_screen"
         subtitles_path: Optional[Path] = None,
         custom_x_ratio: Optional[float] = None,
+        platform: str = "instagram",
     ) -> Path:
         """
         Extracts, formats to 9:16 vertical (1080x1920), burns animated subtitles,
-        and renders using GPU hardware acceleration.
+        and renders at optimal Instagram Reels bitrate (4.5M H.264 High, BT.709, 30fps)
+        with GPU NVENC acceleration.
         """
         output_file = self.output_dir / f"{output_name}.mp4"
         duration = end_time - start_time
+
+        # Extract platform profile specs
+        profile = PLATFORM_PROFILES.get(platform, PLATFORM_PROFILES["instagram"])
+        v_bitrate = profile["video_bitrate"]
+        maxrate = profile["maxrate"]
+        bufsize = profile["bufsize"]
+        a_bitrate = profile["audio_bitrate"]
+        target_fps = str(profile.get("fps", 30))
+        gop = str(profile.get("gop", 60))
 
         # Calculate crop position if smart_crop
         if layout_mode == "smart_crop":
@@ -142,19 +153,29 @@ class VideoEditor:
             "-filter_complex", filter_chain,
             "-map", "[v]",
             "-map", "0:a?",
+            "-r", target_fps,
+            "-g", gop,
+            "-keyint_min", str(max(15, int(gop) // 2)),
+            "-sc_threshold", "0",
+            "-color_primaries", "bt709",
+            "-color_trc", "bt709",
+            "-colorspace", "bt709",
+            "-profile:v", "high",
+            "-level", "4.2",
             "-c:v", self.codec,
-            "-b:v", "6M",
-            "-maxrate", "8M",
-            "-bufsize", "12M",
+            "-b:v", v_bitrate,
+            "-maxrate", maxrate,
+            "-bufsize", bufsize,
             "-pix_fmt", "yuv420p",
             "-c:a", "aac",
-            "-b:a", "192k",
+            "-b:a", a_bitrate,
             "-ar", "44100",
+            "-ac", "2",
             "-movflags", "+faststart",
             str(output_file)
         ]
 
-        # For NVENC, add preset p4 / fast
+        # For NVENC, add preset p4 with high quality tuning
         if self.codec == "h264_nvenc":
             cmd.insert(cmd.index("-c:v") + 2, "-preset")
             cmd.insert(cmd.index("-c:v") + 3, "p4")
@@ -163,13 +184,20 @@ class VideoEditor:
         proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         if proc.returncode != 0:
             print(f"FFmpeg error: {proc.stderr}")
-            # Try fallback to libx264 if nvenc failed
+            # Try fallback to CPU encoder if nvenc failed
             if self.codec == "h264_nvenc":
-                print("Retrying with CPU encoder (libx264)...")
-                cmd[cmd.index("h264_nvenc")] = "libx264"
+                print("Retrying with CPU encoder...")
+                # Test which CPU encoder is available (libx264 or libopenh264)
+                cpu_codec = "libx264"
+                check = subprocess.run(["ffmpeg", "-h", "encoder=libx264"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                if check.returncode != 0:
+                    cpu_codec = "libopenh264"
+
+                cmd[cmd.index("h264_nvenc")] = cpu_codec
                 if "-preset" in cmd:
                     idx = cmd.index("-preset")
-                    cmd[idx + 1] = "fast"
+                    cmd.pop(idx)
+                    cmd.pop(idx)
                 proc2 = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
                 if proc2.returncode != 0:
                     raise RuntimeError(f"FFmpeg render failed: {proc2.stderr}")

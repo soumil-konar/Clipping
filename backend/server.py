@@ -12,7 +12,7 @@ from pydantic import BaseModel
 
 from backend.config import (
     BASE_DIR, DOWNLOADS_DIR, CLIPS_DIR, EXPORTS_DIR, STATIC_DIR,
-    CUDA_AVAILABLE, DEFAULT_VIDEO_CODEC
+    CUDA_AVAILABLE, DEFAULT_VIDEO_CODEC, PLATFORM_PROFILES
 )
 from backend.downloader import VideoDownloader
 from backend.transcriber import Transcriber
@@ -49,6 +49,7 @@ class JobRequest(BaseModel):
     url: str
     preset: str = "streamer"  # "streamer", "podcast", "gaming"
     layout_mode: str = "blur_bg"  # "blur_bg", "smart_crop", "split_screen"
+    platform: str = "instagram"  # "instagram", "tiktok", "youtube_shorts"
     target_clips: int = 4
     gemini_api_key: Optional[str] = None
 
@@ -56,6 +57,7 @@ class FineTuneRequest(BaseModel):
     start_time: float
     end_time: float
     layout_mode: str = "blur_bg"
+    platform: str = "instagram"
     custom_x_ratio: Optional[float] = None
     subtitles_enabled: bool = True
     highlight_color: str = "&H00FFFF&"
@@ -93,7 +95,9 @@ def process_clipping_job(job_id: str, req: JobRequest):
             segments=tr_result["segments"],
             energy_timeline=tr_result["energy_timeline"],
             total_duration=dl_info["duration"],
-            target_clips=req.target_clips
+            target_clips=req.target_clips,
+            preset=req.preset,
+            platform=req.platform
         )
 
         # Step 4: Render Candidate Clips in 9:16
@@ -103,28 +107,31 @@ def process_clipping_job(job_id: str, req: JobRequest):
         for i, cand in enumerate(candidate_clips):
             clip_id = f"{job_id}_clip_{i+1}"
             
-            # Generate subtitles
+            # Generate subtitles with platform safe margins
             sub_file = CLIPS_DIR / f"{clip_id}.ass"
             _sub_gen.generate_ass(
                 words_with_timestamps=tr_result["words"],
                 output_path=sub_file,
                 clip_start=cand["start_time"],
-                words_per_group=3
+                words_per_group=3,
+                platform=req.platform
             )
 
-            # Render 9:16 clip
+            # Render 9:16 clip with Instagram-optimal bitrate & GOP
             rendered_video = _editor.render_clip(
                 video_path=Path(dl_info["video_path"]),
                 start_time=cand["start_time"],
                 end_time=cand["end_time"],
                 output_name=clip_id,
                 layout_mode=req.layout_mode,
-                subtitles_path=sub_file
+                subtitles_path=sub_file,
+                platform=req.platform
             )
 
             cand["clip_id"] = clip_id
             cand["video_url"] = f"/media/clips/{rendered_video.name}"
             cand["layout_mode"] = req.layout_mode
+            cand["platform"] = req.platform
             cand["subtitles_enabled"] = True
             cand["exported"] = False
             processed_clips.append(cand)
@@ -147,6 +154,7 @@ def get_system_status():
         "encoder": _editor.codec,
         "has_gemini_key": has_gemini,
         "total_jobs": len(jobs_db),
+        "platform_profiles": PLATFORM_PROFILES
     }
 
 @app.post("/api/settings")
@@ -203,7 +211,8 @@ def fine_tune_clip(clip_id: str, req: FineTuneRequest):
             output_path=sub_file,
             clip_start=req.start_time,
             words_per_group=3,
-            highlight_color=req.highlight_color
+            highlight_color=req.highlight_color,
+            platform=req.platform
         )
 
     rendered_video = _editor.render_clip(
@@ -213,13 +222,15 @@ def fine_tune_clip(clip_id: str, req: FineTuneRequest):
         output_name=clip_id,
         layout_mode=req.layout_mode,
         subtitles_path=sub_file if req.subtitles_enabled else None,
-        custom_x_ratio=req.custom_x_ratio
+        custom_x_ratio=req.custom_x_ratio,
+        platform=req.platform
     )
 
     clip["start_time"] = req.start_time
     clip["end_time"] = req.end_time
     clip["duration"] = round(req.end_time - req.start_time, 1)
     clip["layout_mode"] = req.layout_mode
+    clip["platform"] = req.platform
     clip["subtitles_enabled"] = req.subtitles_enabled
     clip["video_url"] = f"/media/clips/{rendered_video.name}?t={int(os.path.getmtime(rendered_video))}"
 
