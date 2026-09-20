@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ClipForge | AI Short-Form Video Studio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="navbar">
+      <div class="brand">
+        <div class="logo-icon">
+          <svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" stroke-width="2.5" fill="none">
+            <polygon points="5 3 19 12 5 21 5 3"></polygon>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <h1>ClipForge <span class="badge-studio">STUDIO</span></h1>
+          <p class="tagline">Automated AI Clipper for TikTok, Shorts & Reels</p>
+        </div>
+      </div>
+
+      <div class="nav-actions">
+        <div id="gpu-status-badge" class="status-pill">
+          <span class="pulse-dot"></span>
+          <span id="gpu-text">Detecting GPU...</span>
+        </div>
+        <button id="btn-settings" class="btn btn-secondary">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+          Settings
+        </button>
+        <a href="https://clipping.net/campaigns" target="_blank" rel="noopener noreferrer" class="btn btn-campaign">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+          clipping.net
+        </a>
+      </div>
+    </header>
+
+    <!-- Main Content Grid -->
+    <main class="main-layout">
+      <!-- Left Column: Input and Stream Jobs -->
+      <section class="feed-column">
+        <!-- Ingestion Box -->
+        <div class="glass-card ingest-box">
+          <div class="card-header">
+            <h2>Source Stream or Video</h2>
+            <span class="badge-hint">Kick · Twitch · YouTube · Direct Link</span>
+          </div>
+
+          <form id="ingest-form" class="ingest-form">
+            <div class="url-input-wrapper">
+              <input type="url" id="stream-url" placeholder="Paste YouTube, Twitch, or Kick URL here..." required>
+              <button type="button" id="btn-paste" class="btn-paste-icon" title="Paste from clipboard">📋 Paste</button>
+            </div>
+
+            <div class="preset-row">
+              <div class="preset-label">Layout Mode:</div>
+              <div class="preset-chips">
+                <label class="chip-label">
+                  <input type="radio" name="layout_mode" value="blur_bg" checked>
+                  <span class="chip">Cinematic Blur BG</span>
+                </label>
+                <label class="chip-label">
+                  <input type="radio" name="layout_mode" value="split_screen">
+                  <span class="chip">Streamer Split (Cam + Game)</span>
+                </label>
+                <label class="chip-label">
+                  <input type="radio" name="layout_mode" value="smart_crop">
+                  <span class="chip">Smart Face-Tracking</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="options-row">
+              <div class="option-field">
+                <label for="target-clips">Clips to extract:</label>
+                <select id="target-clips">
+                  <option value="3">Top 3 Viral Clips</option>
+                  <option value="4" selected>Top 4 Viral Clips</option>
+                  <option value="6">Top 6 Viral Clips</option>
+                </select>
+              </div>
+              <button type="submit" id="btn-submit" class="btn btn-primary btn-glow">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                <span>Extract Viral Clips</span>
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Processing Jobs List -->
+        <div class="glass-card jobs-container">
+          <div class="card-header">
+            <h3>Recent Stream Jobs</h3>
+            <span id="job-count" class="badge-counter">0 jobs</span>
+          </div>
+          <div id="jobs-list" class="jobs-list">
+            <div class="empty-state">
+              <p>No streams processed yet. Paste a URL above to start automated clipping.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Right Column: Interactive Curation & Review Deck -->
+      <section class="curation-column">
+        <div id="curation-deck" class="glass-card curation-deck">
+          <div class="curation-header">
+            <div>
+              <h2 id="active-clip-title">Review & Curation Deck</h2>
+              <p id="active-clip-meta" class="subtle-text">Select an extracted clip to preview, fine-tune timestamps, and copy metadata.</p>
+            </div>
+            <div id="virality-score-tag" class="virality-pill hidden">
+              🔥 <span id="score-val">95</span>/100 Virality
+            </div>
+          </div>
+
+          <!-- Empty placeholder if no clip selected -->
+          <div id="curation-placeholder" class="deck-empty">
+            <div class="placeholder-icon">🎬</div>
+            <h3>Waiting for Clips</h3>
+            <p>Once a stream is processed, your candidate shorts will appear here for 9:16 vertical preview and 2-minute fine-tuning.</p>
+          </div>
+
+          <!-- Active Inspection Deck (Hidden until clip selected) -->
+          <div id="curation-content" class="deck-content hidden">
+            <!-- 9:16 Phone Previewer & Controls Grid -->
+            <div class="preview-grid">
+              <!-- Phone Frame -->
+              <div class="phone-frame">
+                <div class="phone-notch"></div>
+                <video id="preview-video" controls playsinline loop></video>
+                <div class="video-overlay-badges">
+                  <span id="player-time-badge" class="overlay-badge">0:00</span>
+                  <span id="player-layout-badge" class="overlay-badge layout">Blur BG</span>
+                </div>
+              </div>
+
+              <!-- Fine-Tuning Controls -->
+              <div class="inspector-controls">
+                <div class="control-box">
+                  <h4>⏱️ Timestamp Trimmer (30s - 60s)</h4>
+                  <div class="trimmer-row">
+                    <div class="timestamp-field">
+                      <label>Start (s):</label>
+                      <div class="stepper">
+                        <button class="btn-step" onclick="adjustTime('start', -1)">-1s</button>
+                        <input type="number" id="trim-start" step="0.5" min="0">
+                        <button class="btn-step" onclick="adjustTime('start', 1)">+1s</button>
+                      </div>
+                    </div>
+                    <div class="timestamp-field">
+                      <label>End (s):</label>
+                      <div class="stepper">
+                        <button class="btn-step" onclick="adjustTime('end', -1)">-1s</button>
+                        <input type="number" id="trim-end" step="0.5" min="0">
+                        <button class="btn-step" onclick="adjustTime('end', 1)">+1s</button>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="duration-display">
+                    Duration: <span id="clip-duration-text">42.5s</span> (Optimal for Shorts/TikTok)
+                  </div>
+                </div>
+
+                <div class="control-box">
+                  <h4>🎨 Layout & Subtitles</h4>
+                  <div class="controls-form">
+                    <div class="field-group">
+                      <label>9:16 Crop Format:</label>
+                      <select id="edit-layout-mode">
+                        <option value="blur_bg">Cinematic Blur Background</option>
+                        <option value="split_screen">Streamer Split (Cam + Game)</option>
+                        <option value="smart_crop">Smart Face-Tracking Crop</option>
+                      </select>
+                    </div>
+
+                    <div class="field-group">
+                      <label>Active Word Karaoke Color:</label>
+                      <select id="edit-subtitle-color">
+                        <option value="&H00FFFF&">⚡ Neon Yellow (High CTR)</option>
+                        <option value="&H00FF00&">🟢 Bright Green</option>
+                        <option value="&HFFFF00&">🔵 Cyan / Sky Blue</option>
+                        <option value="&H0000FF&">🔴 Bright Red</option>
+                      </select>
+                    </div>
+
+                    <button id="btn-re-render" class="btn btn-secondary btn-full">
+                      🔄 Apply Adjustments & Re-render Preview
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Metadata & One-Click Copy -->
+                <div class="control-box metadata-box">
+                  <h4>📋 Social Upload Pack (For clipping.net)</h4>
+                  <div class="metadata-field">
+                    <div class="meta-label-row">
+                      <label>Viral Title:</label>
+                      <button class="btn-copy" onclick="copyText('meta-title')">Copy</button>
+                    </div>
+                    <input type="text" id="meta-title" class="meta-input">
+                  </div>
+
+                  <div class="metadata-field">
+                    <div class="meta-label-row">
+                      <label>Caption & Hashtags:</label>
+                      <button class="btn-copy" onclick="copyText('meta-caption')">Copy</button>
+                    </div>
+                    <textarea id="meta-caption" rows="2" class="meta-textarea"></textarea>
+                  </div>
+
+                  <div class="export-actions">
+                    <button id="btn-download-mp4" class="btn btn-primary btn-full">
+                      ⬇️ Download Final 1080x1920 MP4
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Settings Modal -->
+  <div id="settings-modal" class="modal-overlay hidden">
+    <div class="modal-box glass-card">
+      <div class="modal-header">
+        <h3>Studio Settings</h3>
+        <button id="btn-close-modal" class="btn-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="modal-gemini-key">Gemini API Key (Google AI Studio):</label>
+          <input type="password" id="modal-gemini-key" placeholder="AIzaSy...">
+          <p class="field-hint">Free tier from <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a>. Used for advanced hook detection and viral title writing.</p>
+        </div>
+        <div class="status-summary">
+          <p><strong>GPU Encoder:</strong> <span id="settings-encoder">Detecting...</span></p>
+          <p><strong>Whisper Engine:</strong> Local Whisper (CUDA-accelerated on RTX 3080)</p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="btn-save-settings" class="btn btn-primary">Save Settings</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
