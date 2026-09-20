@@ -12,26 +12,97 @@ async function initApp() {
   setupEventListeners();
 
   // Poll jobs list periodically
-  setInterval(fetchJobs, 3500);
+  setInterval(fetchJobs, 4000);
 }
 
 function setupEventListeners() {
   // Ingest form submission
   const form = document.getElementById('ingest-form');
-  form.addEventListener('submit', handleIngestSubmit);
+  if (form) form.addEventListener('submit', handleIngestSubmit);
+
+  // Quick Preset Chips
+  document.querySelectorAll('.demo-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      const url = chip.dataset.url;
+      const urlInput = document.getElementById('stream-url');
+      if (urlInput) {
+        urlInput.value = url;
+        urlInput.focus();
+      }
+      chip.classList.add('active-chip');
+      setTimeout(() => chip.classList.remove('active-chip'), 400);
+      showToast(`Preset loaded: ${chip.textContent.trim()}`, '⚡');
+    });
+  });
 
   // Paste button
   const pasteBtn = document.getElementById('btn-paste');
-  pasteBtn.addEventListener('click', async () => {
-    try {
-      const text = await navigator.clipboard.readText();
-      if (text) {
-        document.getElementById('stream-url').value = text.trim();
-        showToast('Pasted URL from clipboard', '📋');
+  if (pasteBtn) {
+    pasteBtn.addEventListener('click', async () => {
+      try {
+        const text = await navigator.clipboard.readText();
+        if (text) {
+          document.getElementById('stream-url').value = text.trim();
+          showToast('Pasted URL from clipboard', '📋');
+        }
+      } catch (err) {
+        console.warn('Clipboard read failed:', err);
       }
-    } catch (err) {
-      console.warn('Clipboard read failed:', err);
-    }
+    });
+  }
+
+  // Inspector Tab Switching
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+
+      btn.classList.add('active');
+      const targetId = btn.dataset.tab;
+      const targetContent = document.getElementById(targetId);
+      if (targetContent) targetContent.classList.add('active');
+    });
+  });
+
+  // Safe-Zone Grid Toggle
+  const toggleOverlayBtn = document.getElementById('btn-toggle-overlay');
+  if (toggleOverlayBtn) {
+    toggleOverlayBtn.addEventListener('click', () => {
+      const safeGrid = document.getElementById('safe-zone-grid');
+      if (!safeGrid) return;
+      const isHidden = safeGrid.classList.contains('hidden');
+      if (isHidden) {
+        safeGrid.classList.remove('hidden');
+        toggleOverlayBtn.classList.add('active');
+        document.getElementById('toggle-overlay-text').textContent = 'Hide Margins';
+        showToast('Safe-zone margins displayed', '👁️');
+      } else {
+        safeGrid.classList.add('hidden');
+        toggleOverlayBtn.classList.remove('active');
+        document.getElementById('toggle-overlay-text').textContent = 'Safe Zones';
+      }
+    });
+  }
+
+  // Live Subtitle Color Picker
+  const colorMap = {
+    '&H00FFFF&': { hex: '#ffff00', name: 'Yellow' },
+    '&H00FF00&': { hex: '#00ff88', name: 'Emerald' },
+    '&HFFFF00&': { hex: '#00f0ff', name: 'Cyan' },
+    '&H0000FF&': { hex: '#ff3344', name: 'Crimson' }
+  };
+
+  document.querySelectorAll('input[name="subtitle_color"]').forEach(radio => {
+    radio.addEventListener('change', (e) => {
+      const info = colorMap[e.target.value] || { hex: '#ffff00', name: 'Yellow' };
+      const highlightEl = document.getElementById('preview-highlight-word');
+      if (highlightEl) {
+        highlightEl.style.color = info.hex;
+        highlightEl.style.textShadow = `0 0 10px ${info.hex}`;
+        highlightEl.style.borderBottomColor = info.hex;
+      }
+      showToast(`Subtitle color: ${info.name}`, '🎨');
+    });
   });
 
   // Settings Modal
@@ -40,89 +111,42 @@ function setupEventListeners() {
   const closeBtn = document.getElementById('btn-close-modal');
   const saveSettingsBtn = document.getElementById('btn-save-settings');
 
-  settingsBtn.addEventListener('click', () => {
-    modal.classList.remove('hidden');
-  });
+  if (settingsBtn && modal) {
+    settingsBtn.addEventListener('click', () => modal.classList.remove('hidden'));
+    if (closeBtn) closeBtn.addEventListener('click', () => modal.classList.add('hidden'));
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) modal.classList.add('hidden');
+    });
+  }
 
-  closeBtn.addEventListener('click', () => {
-    modal.classList.add('hidden');
-  });
-
-  modal.addEventListener('click', (e) => {
-    if (e.target === modal) modal.classList.add('hidden');
-  });
-
-  saveSettingsBtn.addEventListener('click', async () => {
-    const key = document.getElementById('modal-gemini-key').value.trim();
-    if (key) {
-      await fetch('/api/settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ gemini_api_key: key })
-      });
-      showToast('Gemini API key saved & connected', '🔑');
-    }
-    modal.classList.add('hidden');
-    fetchSystemStatus();
-  });
+  if (saveSettingsBtn) {
+    saveSettingsBtn.addEventListener('click', async () => {
+      const key = document.getElementById('modal-gemini-key').value.trim();
+      if (key) {
+        await fetch('/api/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ gemini_api_key: key })
+        });
+        showToast('Gemini API key saved', '🔑');
+      }
+      if (modal) modal.classList.add('hidden');
+      fetchSystemStatus();
+    });
+  }
 
   // Fine-tuning re-render
-  document.getElementById('btn-re-render').addEventListener('click', handleReRender);
+  const reRenderBtn = document.getElementById('btn-re-render');
+  if (reRenderBtn) reRenderBtn.addEventListener('click', handleReRender);
 
   // Export / Download
-  document.getElementById('btn-download-mp4').addEventListener('click', handleExport);
-
-  // Video time update badge
-  const video = document.getElementById('preview-video');
-  video.addEventListener('timeupdate', () => {
-    const curr = Math.floor(video.currentTime);
-    const m = Math.floor(curr / 60);
-    const s = curr % 60;
-    const dur = Math.floor(video.duration || 0);
-    const dm = Math.floor(dur / 60);
-    const ds = dur % 60;
-    document.getElementById('player-time-badge').textContent = 
-      `${m}:${s < 10 ? '0' : ''}${s} / ${dm}:${ds < 10 ? '0' : ''}${ds}`;
-  });
+  const downloadBtn = document.getElementById('btn-download-mp4');
+  if (downloadBtn) downloadBtn.addEventListener('click', handleExport);
 
   // Trim inputs change listener
   ['trim-start', 'trim-end'].forEach(id => {
-    document.getElementById(id).addEventListener('input', updateDurationDisplay);
-  });
-
-  // Instagram Overlay Toggle
-  const toggleOverlayBtn = document.getElementById('btn-toggle-overlay');
-  if (toggleOverlayBtn) {
-    toggleOverlayBtn.addEventListener('click', () => {
-      const overlay = document.getElementById('instagram-overlay');
-      const isHidden = overlay.classList.contains('hidden');
-      if (isHidden) {
-        overlay.classList.remove('hidden');
-        toggleOverlayBtn.classList.add('active');
-        document.getElementById('toggle-overlay-text').textContent = 'Hide Instagram Safe-Zone';
-        showToast('Instagram Reels UI safe-zone enabled', '👁️');
-      } else {
-        overlay.classList.add('hidden');
-        toggleOverlayBtn.classList.remove('active');
-        document.getElementById('toggle-overlay-text').textContent = 'Show Instagram UI Safe-Zone';
-      }
-    });
-  }
-
-  // Edit Platform Change Listener
-  const editPlatformSelect = document.getElementById('edit-platform');
-  if (editPlatformSelect) {
-    editPlatformSelect.addEventListener('change', () => {
-      const selected = editPlatformSelect.value;
-      updateSpecPill(selected);
-    });
-  }
-
-  // Ingest Platform Radio Change Listener
-  document.querySelectorAll('input[name="platform_preset"]').forEach(radio => {
-    radio.addEventListener('change', (e) => {
-      updateSpecPill(e.target.value);
-    });
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', updateDurationDisplay);
   });
 }
 
@@ -138,53 +162,26 @@ async function fetchSystemStatus() {
     }
 
     if (data.cuda_available) {
-      badge.textContent = `⚡ RTX 3080 (${data.encoder})`;
-      if (encoderSpan) encoderSpan.textContent = `NVIDIA NVENC (${data.encoder}) Hardware Accelerated`;
+      if (badge) badge.textContent = `RTX 3080 (${data.encoder})`;
+      if (encoderSpan) encoderSpan.textContent = `NVIDIA NVENC (${data.encoder})`;
     } else {
-      badge.textContent = 'CPU Mode';
+      if (badge) badge.textContent = 'CPU Mode';
       if (encoderSpan) encoderSpan.textContent = 'CPU (libx264)';
     }
-
-    // Default platform badge
-    updateSpecPill('instagram');
   } catch (err) {
     console.error('Status fetch error:', err);
-  }
-}
-
-function updateSpecPill(platform) {
-  const specText = document.getElementById('spec-text');
-  const playerSpec = document.getElementById('player-spec-badge');
-  const settingsPlatform = document.getElementById('settings-platform');
-
-  if (platform === 'instagram') {
-    if (specText) specText.textContent = 'Instagram Reels · 4.5M H.264 · 30fps · BT.709';
-    if (playerSpec) playerSpec.textContent = '4.5M Reels H.264';
-    if (settingsPlatform) settingsPlatform.textContent = 'Instagram Reels (4.5M H.264 High · BT.709)';
-  } else if (platform === 'tiktok') {
-    if (specText) specText.textContent = 'TikTok · 5.5M H.264 · 30fps';
-    if (playerSpec) playerSpec.textContent = '5.5M TikTok';
-    if (settingsPlatform) settingsPlatform.textContent = 'TikTok (5.5M H.264 Standard)';
-  } else {
-    if (specText) specText.textContent = 'YouTube Shorts · 8.0M HQ · 30fps';
-    if (playerSpec) playerSpec.textContent = '8.0M Shorts HQ';
-    if (settingsPlatform) settingsPlatform.textContent = 'YouTube Shorts (8.0M HQ)';
   }
 }
 
 async function handleIngestSubmit(e) {
   e.preventDefault();
   const url = document.getElementById('stream-url').value.trim();
-  const targetClips = parseInt(document.getElementById('target-clips').value, 10);
-  const layoutMode = document.querySelector('input[name="layout_mode"]:checked').value;
-  const platformPreset = document.querySelector('input[name="platform_preset"]:checked').value;
-  const contentPreset = document.querySelector('input[name="content_preset"]:checked') 
-    ? document.querySelector('input[name="content_preset"]:checked').value 
-    : 'streamer';
-
   const btn = document.getElementById('btn-submit');
-  btn.disabled = true;
-  btn.innerHTML = '<span class="pulse-dot"></span><span>Queueing AI Stream Pipeline...</span>';
+  
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span>Processing...</span>';
+  }
 
   try {
     const res = await fetch('/api/jobs', {
@@ -192,10 +189,10 @@ async function handleIngestSubmit(e) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         url,
-        preset: contentPreset,
-        layout_mode: layoutMode,
-        platform: platformPreset,
-        target_clips: targetClips
+        preset: 'streamer',
+        layout_mode: 'blur_bg',
+        platform: 'instagram',
+        target_clips: 4
       })
     });
     const data = await res.json();
@@ -203,10 +200,17 @@ async function handleIngestSubmit(e) {
     showToast(`Stream queued (Job #${data.job_id})`, '🚀');
     fetchJobs();
   } catch (err) {
-    showToast(`Failed to queue job: ${err.message}`, '❌');
+    showToast(`Queue failed: ${err.message}`, '❌');
   } finally {
-    btn.disabled = false;
-    btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg><span>Extract Viral Clips</span>';
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = `
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+          <polygon points="5 3 19 12 5 21 5 3"></polygon>
+        </svg>
+        <span>Generate Clips</span>
+      `;
+    }
   }
 }
 
@@ -223,61 +227,53 @@ async function fetchJobs() {
 function renderJobsList(jobs) {
   const container = document.getElementById('jobs-list');
   const countBadge = document.getElementById('job-count');
-  countBadge.textContent = `${jobs.length} jobs`;
 
-  if (jobs.length === 0) {
+  let allClips = [];
+  jobs.forEach(job => {
+    if (job.clips && job.clips.length > 0) {
+      job.clips.forEach(clip => {
+        allClips.push({ ...clip, jobId: job.job_id, creator: job.creator });
+      });
+    }
+  });
+
+  if (countBadge) countBadge.textContent = `${allClips.length}`;
+
+  if (allClips.length === 0) {
     container.innerHTML = `
-      <div class="empty-state">
-        <div class="empty-icon">📺</div>
-        <p>No streams processed yet. Paste a stream URL above to start automated clipping.</p>
+      <div class="empty-clips">
+        <span>🎬</span>
+        <p>No clips generated yet. Paste a stream URL above to begin.</p>
       </div>`;
     return;
   }
 
   let html = '';
-  const sortedJobs = [...jobs].reverse();
-
-  sortedJobs.forEach(job => {
-    const isActive = activeJobId === job.job_id;
-    const statusClass = `status-${job.status}`;
-
-    let clipPills = '';
-    if (job.clips && job.clips.length > 0) {
-      clipPills = '<div class="job-clip-pills">';
-      job.clips.forEach((clip, idx) => {
-        const isSelected = activeClip && activeClip.clip_id === clip.clip_id;
-        const hookTag = clip.hook_type ? ` · ${clip.hook_type.split(' ')[0]}` : '';
-        clipPills += `
-          <button class="clip-pill ${isSelected ? 'active' : ''}" onclick="selectClip('${job.job_id}', '${clip.clip_id}')">
-            🔥 #${idx + 1} (${clip.virality_score}%${hookTag})
-          </button>
-        `;
-      });
-      clipPills += '</div>';
-    }
+  allClips.forEach((clip, idx) => {
+    const isSelected = activeClip && activeClip.clip_id === clip.clip_id;
+    const score = clip.virality_score || 90;
+    const dur = Math.round(clip.duration || 35);
 
     html += `
-      <div class="job-card ${isActive ? 'active' : ''}">
-        <div class="job-header">
-          <div class="job-title">${escapeHtml(job.title)}</div>
-          <span class="job-status-pill ${statusClass}">${job.status}</span>
+      <div class="clip-card ${isSelected ? 'active' : ''}" onclick="selectClip('${clip.jobId}', '${clip.clip_id}')">
+        <div class="clip-card-header">
+          <span class="clip-card-badge">🔥 ${score}% virality</span>
+          <span class="clip-card-duration">0:${dur < 10 ? '0' : ''}${dur}</span>
         </div>
-        <div class="job-progress-bar">
-          <div class="job-progress-fill" style="width: ${job.progress || 10}%"></div>
+        <div class="clip-card-title">${escapeHtml(clip.title || `Clip #${idx + 1}`)}</div>
+        <div class="clip-card-footer">
+          <span>@${escapeHtml((clip.creator || 'streamer').toLowerCase().replace(/\s+/g, ''))}</span>
+          <span>${escapeHtml(clip.hook_type || 'Curiosity Gap')}</span>
         </div>
-        ${clipPills}
       </div>
     `;
   });
 
   container.innerHTML = html;
 
-  // Auto-select first clip of finished job if none selected
-  if (!activeClip && jobs.length > 0) {
-    const latestWithClips = sortedJobs.find(j => j.clips && j.clips.length > 0);
-    if (latestWithClips) {
-      selectClip(latestWithClips.job_id, latestWithClips.clips[0].clip_id);
-    }
+  // Auto-select first clip if none selected
+  if (!activeClip && allClips.length > 0) {
+    selectClip(allClips[0].jobId, allClips[0].clip_id);
   }
 }
 
@@ -291,68 +287,59 @@ window.selectClip = async function(jobId, clipId) {
 
     activeClip = clip;
 
-    // Show curation deck
-    document.getElementById('curation-placeholder').classList.add('hidden');
-    document.getElementById('curation-content').classList.remove('hidden');
-
-    // Populate video
+    // Video Element
     const video = document.getElementById('preview-video');
-    video.src = clip.video_url;
-    video.load();
+    if (video) {
+      video.src = clip.video_url;
+      video.load();
+    }
 
-    // Populate titles & badges
-    document.getElementById('active-clip-title').textContent = clip.title || 'Clip Review';
-    document.getElementById('active-clip-meta').textContent = 
-      `${job.creator || 'Streamer'} · ${clip.duration}s · Optimized for ${clip.platform || 'Instagram Reels'}`;
-    
+    // Header metadata
+    const titleEl = document.getElementById('active-clip-title');
+    if (titleEl) titleEl.textContent = clip.title || 'Clip Preview';
+
+    const metaEl = document.getElementById('active-clip-meta');
+    if (metaEl) {
+      metaEl.textContent = `@${(job.creator || 'streamer').toLowerCase().replace(/\s+/g, '')} · ${clip.duration}s · ${clip.platform || 'Instagram Reels'}`;
+    }
+
     // Virality score
-    const viralityTag = document.getElementById('virality-score-tag');
-    viralityTag.classList.remove('hidden');
-    document.getElementById('score-val').textContent = clip.virality_score || '90';
+    const scoreVal = document.getElementById('score-val');
+    if (scoreVal) scoreVal.textContent = clip.virality_score || '95';
 
-    // Hook type and retention pills
-    const hookTypeTag = document.getElementById('hook-type-tag');
-    if (hookTypeTag) {
-      hookTypeTag.textContent = `🎯 ${clip.hook_type || 'Curiosity Gap'}`;
-      hookTypeTag.classList.remove('hidden');
-    }
-
-    const retentionTag = document.getElementById('retention-score-tag');
-    if (retentionTag) {
-      retentionTag.textContent = `⚡ ${clip.retention_prediction || clip.virality_score || 88}% Retention`;
-      retentionTag.classList.remove('hidden');
-    }
-
-    // Video badges
-    document.getElementById('player-layout-badge').textContent = 
-      clip.layout_mode === 'split_screen' ? 'Split Screen' : (clip.layout_mode === 'smart_crop' ? 'Face Tracking' : 'Blur BG');
-
-    const currentPlatform = clip.platform || 'instagram';
-    updateSpecPill(currentPlatform);
-
-    // Populate Trimmer
-    document.getElementById('trim-start').value = clip.start_time;
-    document.getElementById('trim-end').value = clip.end_time;
+    // Trimmer values
+    const startInput = document.getElementById('trim-start');
+    const endInput = document.getElementById('trim-end');
+    if (startInput) startInput.value = clip.start_time;
+    if (endInput) endInput.value = clip.end_time;
     updateDurationDisplay();
 
     // Layout & Platform Selectors
-    document.getElementById('edit-layout-mode').value = clip.layout_mode || 'blur_bg';
-    if (document.getElementById('edit-platform')) {
-      document.getElementById('edit-platform').value = currentPlatform;
-    }
+    const layoutSelect = document.getElementById('edit-layout-mode');
+    if (layoutSelect) layoutSelect.value = clip.layout_mode || 'blur_bg';
 
-    // Strategy breakdown
+    const platformSelect = document.getElementById('edit-platform');
+    if (platformSelect) platformSelect.value = clip.platform || 'instagram';
+
+    // Strategy & Captions
     const strategyText = document.getElementById('ai-strategy-text');
     if (strategyText) {
-      strategyText.textContent = clip.reason || 'High emotional engagement and dynamic dialogue flow with detected volume peaks.';
+      strategyText.textContent = clip.reason || 'High emotional engagement and dynamic dialogue flow.';
     }
 
-    // Metadata
-    document.getElementById('meta-title').value = clip.title || '';
-    const hashtags = (clip.hashtags || []).join(' ');
-    document.getElementById('meta-caption').value = `${clip.description || ''}\n\n${hashtags}`;
+    const titleInput = document.getElementById('meta-title');
+    if (titleInput) titleInput.value = clip.title || '';
 
-    fetchJobs(); // Update active highlights
+    const captionInput = document.getElementById('meta-caption');
+    if (captionInput) {
+      const hashtags = (clip.hashtags || []).join(' ');
+      captionInput.value = `${clip.description || ''}\n\n${hashtags}`;
+    }
+
+    // Update active highlight in sidebar
+    document.querySelectorAll('.clip-card').forEach(card => {
+      card.classList.remove('active');
+    });
   } catch (err) {
     console.error('Error selecting clip:', err);
   }
@@ -360,6 +347,7 @@ window.selectClip = async function(jobId, clipId) {
 
 window.adjustTime = function(type, delta) {
   const input = document.getElementById(`trim-${type}`);
+  if (!input) return;
   let val = parseFloat(input.value) || 0;
   val = Math.max(0, parseFloat((val + delta).toFixed(1)));
   input.value = val;
@@ -367,22 +355,23 @@ window.adjustTime = function(type, delta) {
 };
 
 function updateDurationDisplay() {
-  const start = parseFloat(document.getElementById('trim-start').value) || 0;
-  const end = parseFloat(document.getElementById('trim-end').value) || 0;
+  const start = parseFloat(document.getElementById('trim-start')?.value) || 0;
+  const end = parseFloat(document.getElementById('trim-end')?.value) || 0;
   const dur = Math.max(0, (end - start).toFixed(1));
-  document.getElementById('clip-duration-text').textContent = `${dur}s`;
+
+  const durText = document.getElementById('clip-duration-text');
+  if (durText) durText.textContent = `${dur}s`;
 
   const statusPill = document.getElementById('duration-status-pill');
   if (statusPill) {
     if (dur >= 20 && dur <= 45) {
-      statusPill.textContent = '✓ Optimal for Reels & Loopability';
-      statusPill.className = 'pill-duration-good';
+      statusPill.textContent = 'Optimal (25-45s)';
       statusPill.style.color = '#34d399';
     } else if (dur > 45 && dur <= 60) {
-      statusPill.textContent = '⚡ Good pacing (Slightly long for loops)';
+      statusPill.textContent = 'Good (Loopable)';
       statusPill.style.color = '#fbbf24';
     } else {
-      statusPill.textContent = '⚠️ Attention: Over 60s will not monetize on Shorts';
+      statusPill.textContent = 'Long (>60s)';
       statusPill.style.color = '#f87171';
     }
   }
@@ -392,14 +381,16 @@ async function handleReRender() {
   if (!activeClip) return;
 
   const btn = document.getElementById('btn-re-render');
-  btn.disabled = true;
-  btn.textContent = '⏳ Rendering NVENC Preview (4.5M H.264)...';
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Rendering (NVENC)...';
+  }
 
   const start = parseFloat(document.getElementById('trim-start').value);
   const end = parseFloat(document.getElementById('trim-end').value);
   const layout = document.getElementById('edit-layout-mode').value;
-  const platform = document.getElementById('edit-platform') ? document.getElementById('edit-platform').value : 'instagram';
-  
+  const platform = document.getElementById('edit-platform').value;
+
   const checkedColor = document.querySelector('input[name="subtitle_color"]:checked');
   const subColor = checkedColor ? checkedColor.value : '&H00FFFF&';
 
@@ -420,27 +411,30 @@ async function handleReRender() {
     if (data.clip) {
       activeClip = data.clip;
       const video = document.getElementById('preview-video');
-      video.src = data.clip.video_url;
-      video.load();
-      video.play();
-      document.getElementById('player-layout-badge').textContent = 
-        layout === 'split_screen' ? 'Split Screen' : (layout === 'smart_crop' ? 'Face Tracking' : 'Blur BG');
-      updateSpecPill(platform);
-      showToast('Re-rendered with Instagram-optimal bitrate & safe margins', '✓');
+      if (video) {
+        video.src = data.clip.video_url;
+        video.load();
+        video.play();
+      }
+      showToast('Re-rendered with NVENC hardware acceleration', '✓');
     }
   } catch (err) {
-    showToast('Re-render failed: ' + err.message, '❌');
+    showToast('Re-render error: ' + err.message, '❌');
   } finally {
-    btn.disabled = false;
-    btn.textContent = '🔄 Apply Adjustments & Re-render (NVENC Accelerated)';
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '🔄 Apply & Re-render (NVENC Accelerated)';
+    }
   }
 }
 
 async function handleExport() {
   if (!activeClip) return;
   const btn = document.getElementById('btn-download-mp4');
-  btn.disabled = true;
-  btn.textContent = 'Preparing Final 1080x1920 MP4...';
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Preparing download...';
+  }
 
   try {
     const res = await fetch(`/api/clips/${activeClip.clip_id}/export`, {
@@ -459,25 +453,26 @@ async function handleExport() {
   } catch (err) {
     showToast('Export error: ' + err.message, '❌');
   } finally {
-    btn.disabled = false;
-    btn.textContent = '⬇️ Download Final 1080x1920 MP4 (Instagram Ready)';
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="7 10 12 15 17 10"></polyline>
+          <line x1="12" y1="15" x2="12" y2="3"></line>
+        </svg>
+        <span>Download 1080x1920 MP4 (Instagram Ready)</span>
+      `;
+    }
   }
 }
 
 window.copyText = function(elementId) {
   const el = document.getElementById(elementId);
+  if (!el) return;
   el.select();
   navigator.clipboard.writeText(el.value);
-  
-  const label = elementId === 'meta-title' ? 'Viral Title' : 'Caption & Hashtags';
-  showToast(`Copied ${label} for Instagram upload`, '✓');
-
-  const copyBtn = el.previousElementSibling ? el.previousElementSibling.querySelector('.btn-copy') : null;
-  if (copyBtn) {
-    const prevText = copyBtn.textContent;
-    copyBtn.textContent = '✓ Copied!';
-    setTimeout(() => { copyBtn.textContent = prevText; }, 1800);
-  }
+  showToast('Copied to clipboard', '✓');
 };
 
 function showToast(message, icon = '✓') {
@@ -492,7 +487,7 @@ function showToast(message, icon = '✓') {
   setTimeout(() => {
     toast.classList.add('toast-out');
     setTimeout(() => toast.remove(), 250);
-  }, 2600);
+  }, 2400);
 }
 
 function escapeHtml(text) {
