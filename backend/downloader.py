@@ -53,13 +53,15 @@ class VideoDownloader:
         audio_path = self.output_dir / f"{job_id}.wav"
 
         ydl_opts = {
-            # Format: Best video <= 1080p + best audio, merged into mp4
-            "format": "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best",
+            # Avoid YouTube Premium / restricted bitstreams (format 616, etc.) which return HTTP 403
+            "format": "bestvideo[height<=1080][format_note!*=Premium]+bestaudio/best[height<=1080]/best",
             "outtmpl": str(video_path.with_suffix(".%(ext)s")),
             "merge_output_format": "mp4",
             "quiet": False,
-            "no_warnings": True,
+            "no_warnings": False,
         }
+        if Path("/usr/bin/node").exists():
+            ydl_opts["js_runtimes"] = {"node": {"path": "/usr/bin/node"}}
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
