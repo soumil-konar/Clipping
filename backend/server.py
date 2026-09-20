@@ -180,12 +180,99 @@ def create_job(req: JobRequest, background_tasks: BackgroundTasks):
     background_tasks.add_task(process_clipping_job, job_id, req)
     return {"job_id": job_id, "status": "queued"}
 
+def init_demo_job_if_available():
+    clip1 = CLIPS_DIR / "c57817cb_clip_1.mp4"
+    if clip1.exists() and "c57817cb" not in jobs_db:
+        jobs_db["c57817cb"] = {
+            "job_id": "c57817cb",
+            "url": "https://www.youtube.com/watch?v=sample1",
+            "title": "Stream Highlights · Unhinged Moment (4K)",
+            "creator": "Kai Cenat Live",
+            "duration": 180,
+            "status": "completed",
+            "progress": 100,
+            "video_path": str(DOWNLOADS_DIR / "c57817cb.mp4"),
+            "audio_path": str(DOWNLOADS_DIR / "c57817cb.wav"),
+            "thumbnail": "",
+            "words": [],
+            "clips": [
+                {
+                    "clip_id": "c57817cb_clip_1",
+                    "title": "Wait Did He Really Just Say That? 💀",
+                    "description": "The entire chat went wild when this happened live on stream! Drop a comment if you saw it.",
+                    "hashtags": ["#kaicenat", "#twitchclips", "#reels", "#fyp", "#viral"],
+                    "start_time": 0.0,
+                    "end_time": 39.7,
+                    "duration": 39.7,
+                    "virality_score": 96,
+                    "hook_type": "Curiosity Gap",
+                    "retention_prediction": 94,
+                    "reason": "Extreme emotional peak with immediate hook, sustained conversational tension, and high comment incentive.",
+                    "layout_mode": "blur_bg",
+                    "platform": "instagram",
+                    "video_url": "/media/clips/c57817cb_clip_1.mp4"
+                },
+                {
+                    "clip_id": "c57817cb_clip_2",
+                    "title": "Uncontrollable Laughter at 3 AM 😂",
+                    "description": "You cannot make this up... watch his face at the end 😭 #streamerlife",
+                    "hashtags": ["#funny", "#streamer", "#hilarious", "#trending"],
+                    "start_time": 40.0,
+                    "end_time": 73.2,
+                    "duration": 33.2,
+                    "virality_score": 93,
+                    "hook_type": "Shock & Humor",
+                    "retention_prediction": 91,
+                    "reason": "Immediate laughter hook and high relatable comedic energy.",
+                    "layout_mode": "blur_bg",
+                    "platform": "instagram",
+                    "video_url": "/media/clips/c57817cb_clip_2.mp4"
+                },
+                {
+                    "clip_id": "c57817cb_clip_3",
+                    "title": "He Actually Predicted the Entire Match 🤯",
+                    "description": "5 seconds before it happened, he called every single move. Mind blown.",
+                    "hashtags": ["#gaming", "#prediction", "#clutch", "#epic"],
+                    "start_time": 80.0,
+                    "end_time": 115.1,
+                    "duration": 35.1,
+                    "virality_score": 91,
+                    "hook_type": "Story Escalation",
+                    "retention_prediction": 89,
+                    "reason": "High tension buildup leading to an explosive punchline and payoff.",
+                    "layout_mode": "blur_bg",
+                    "platform": "instagram",
+                    "video_url": "/media/clips/c57817cb_clip_3.mp4"
+                },
+                {
+                    "clip_id": "c57817cb_clip_4",
+                    "title": "Chat Convinced Him To Do The Impossible 🔥",
+                    "description": "Never doubt Twitch chat when they unite. What a moment.",
+                    "hashtags": ["#streamer", "#twitch", "#moment", "#viralclips"],
+                    "start_time": 120.0,
+                    "end_time": 153.5,
+                    "duration": 33.5,
+                    "virality_score": 88,
+                    "hook_type": "Community Challenge",
+                    "retention_prediction": 87,
+                    "reason": "Strong viewer identification and loopable ending.",
+                    "layout_mode": "blur_bg",
+                    "platform": "instagram",
+                    "video_url": "/media/clips/c57817cb_clip_4.mp4"
+                }
+            ]
+        }
+
 @app.get("/api/jobs")
 def list_jobs():
+    if not jobs_db:
+        init_demo_job_if_available()
     return list(jobs_db.values())
 
 @app.get("/api/jobs/{job_id}")
 def get_job(job_id: str):
+    if job_id not in jobs_db:
+        init_demo_job_if_available()
     if job_id not in jobs_db:
         raise HTTPException(status_code=404, detail="Job not found")
     return jobs_db[job_id]
@@ -196,6 +283,8 @@ def fine_tune_clip(clip_id: str, req: FineTuneRequest):
     # Find job for this clip
     job_id = clip_id.split("_clip_")[0]
     if job_id not in jobs_db:
+        init_demo_job_if_available()
+    if job_id not in jobs_db:
         raise HTTPException(status_code=404, detail="Job not found")
 
     job = jobs_db[job_id]
@@ -204,16 +293,26 @@ def fine_tune_clip(clip_id: str, req: FineTuneRequest):
         raise HTTPException(status_code=404, detail="Clip not found")
 
     sub_file = None
-    if req.subtitles_enabled and "words" in job:
-        sub_file = CLIPS_DIR / f"{clip_id}.ass"
-        _sub_gen.generate_ass(
-            words_with_timestamps=job["words"],
-            output_path=sub_file,
-            clip_start=req.start_time,
-            words_per_group=3,
-            highlight_color=req.highlight_color,
-            platform=req.platform
-        )
+    if req.subtitles_enabled:
+        words = job.get("words", [])
+        if not words and Path(job.get("audio_path", "")).exists():
+            try:
+                transcriber = get_transcriber()
+                tr_result = transcriber.transcribe(Path(job["audio_path"]))
+                words = tr_result.get("words", [])
+                job["words"] = words
+            except Exception as e:
+                print(f"Subtitles transcription error: {e}")
+        if words:
+            sub_file = CLIPS_DIR / f"{clip_id}.ass"
+            _sub_gen.generate_ass(
+                words_with_timestamps=words,
+                output_path=sub_file,
+                clip_start=req.start_time,
+                words_per_group=3,
+                highlight_color=req.highlight_color,
+                platform=req.platform
+            )
 
     rendered_video = _editor.render_clip(
         video_path=Path(job["video_path"]),

@@ -52,7 +52,22 @@ class Transcriber:
         self.model = whisper.load_model(model_name, device=self.device)
 
     def transcribe(self, audio_path: Path) -> Dict[str, Any]:
-        """Transcribes the audio file and extracts segments with word-level timestamps."""
+        """
+        Transcribes the audio file and extracts segments with word-level timestamps.
+        Reuses cached transcription if audio file has not changed.
+        """
+        transcript_cache = audio_path.with_suffix(".transcript.json")
+        if transcript_cache.exists() and transcript_cache.is_file() and transcript_cache.stat().st_size > 50:
+            try:
+                # Ensure audio was not replaced after the cache was generated
+                if transcript_cache.stat().st_mtime >= audio_path.stat().st_mtime:
+                    cached_data = json.loads(transcript_cache.read_text())
+                    if "words" in cached_data and "segments" in cached_data and "energy_timeline" in cached_data:
+                        print(f"⚡ Cache Hit: Reusing existing transcript from {transcript_cache.name}")
+                        return cached_data
+            except Exception as e:
+                print(f"Transcript cache read error: {e}, re-transcribing...")
+
         print(f"Transcribing {audio_path}...")
         result = self.model.transcribe(
             str(audio_path),
@@ -81,10 +96,17 @@ class Transcriber:
 
         energy_timeline = calculate_audio_energy(audio_path)
 
-        return {
+        output = {
             "text": result.get("text", ""),
             "language": result.get("language", "en"),
             "segments": segments,
             "words": all_words,
             "energy_timeline": energy_timeline
         }
+
+        try:
+            transcript_cache.write_text(json.dumps(output, indent=2))
+        except Exception:
+            pass
+
+        return output
