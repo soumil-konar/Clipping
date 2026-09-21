@@ -305,4 +305,4 @@ Returns GPU CUDA status, detected hardware encoder, and Gemini API key status.
 ---
 
 ## 📄 License
-Released under the [MIT License](LICENSE). Built for creators, short-form editors, and viral clipping networks.
+Released under the [MIT License](LICENSE). Built by [Soumil Konar](https://github.com/soumil-konar) for creators, short-form editors, and viral clipping networks.
