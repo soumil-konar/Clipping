@@ -69,20 +69,28 @@ class ViralityScorer:
 
         # Preset-specific creative directive
         preset_directives = {
-            "streamer": (
-                "NICHE: Live Streamer Banter & Drama.\n"
-                "Prioritize: Explosive creator reactions, chat roasting, unexpected incidents, funny misunderstandings, or wild unscripted confessions."
+            "sports": (
+                "NICHE: Sports & Match Highlights (Football, Basketball, Cricket, Combat Sports, F1).\n"
+                "Prioritize: Electric goals, match-winning plays, miraculous goalkeeper/defensive saves, contentious referee/VAR controversy, crowd noise explosions, commentary volume spikes, and emotional stoppage-time drama."
             ),
-            "podcast": (
-                "NICHE: Podcast & Deep Conversation.\n"
-                "Prioritize: Mind-expanding revelations, contrarian life/business wisdom, taboo topics, heated debates, or secrets that challenge conventional thinking."
+            "standup": (
+                "NICHE: Standup Comedy & Stage Performance.\n"
+                "Prioritize: Tight setup-to-punchline narrative arcs, unexpected punchline misdirection, thunderous crowd laughter/applause, quick-witted crowd-work & heckler roasts, relatable social observational humor, and self-deprecating twists."
             ),
             "gaming": (
                 "NICHE: Gaming & Esports.\n"
-                "Prioritize: Clutch 1vX plays, hilarious glitches/fails, rage quit moments, toxic/funny teammate banter, and heart-stopping finishes."
+                "Prioritize: Clutch 1vX plays, impossible movement escapes, sniper flicks/aces, hilarious glitches/fails, rage quit moments, chaotic teammate comms, and heart-stopping finishes."
+            ),
+            "podcast": (
+                "NICHE: Podcast & Deep Conversation.\n"
+                "Prioritize: Mind-expanding revelations, contrarian life/business wisdom, taboo topics, heated debates, untold stories, and insights that challenge conventional assumptions."
+            ),
+            "streamer": (
+                "NICHE: Live Streamer Banter & Drama.\n"
+                "Prioritize: Explosive creator reactions, chat roasting, unexpected real-life incidents, hilarious misunderstandings, wild confessions, or viral stream memes."
             )
         }
-        niche_directive = preset_directives.get(preset, preset_directives["streamer"])
+        niche_directive = preset_directives.get(preset, preset_directives["sports"])
 
         prompt = f"""You are an elite Lead Short-Form Video Producer, Viral Growth Engineer, and Retention Scientist who curates clips that generate 1M+ views on Instagram Reels, TikTok, and YouTube Shorts for clipping.net.
 

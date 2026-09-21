@@ -1,6 +1,7 @@
 let activeJobId = null;
 let activeClip = null;
 let systemProfiles = {};
+let selectedGenre = 'sports';
 
 document.addEventListener('DOMContentLoaded', () => {
   initApp();
@@ -20,18 +21,39 @@ function setupEventListeners() {
   const form = document.getElementById('ingest-form');
   if (form) form.addEventListener('submit', handleIngestSubmit);
 
-  // Quick Preset Chips
-  document.querySelectorAll('.demo-chip').forEach(chip => {
-    chip.addEventListener('click', () => {
-      const url = chip.dataset.url;
-      const urlInput = document.getElementById('stream-url');
-      if (urlInput) {
-        urlInput.value = url;
-        urlInput.focus();
+  // Content Genre AI Tuning Pills
+  document.querySelectorAll('.genre-pill').forEach(pill => {
+    pill.addEventListener('click', () => {
+      document.querySelectorAll('.genre-pill').forEach(p => p.classList.remove('active'));
+      pill.classList.add('active');
+      selectedGenre = pill.dataset.genre || 'sports';
+
+      // Update genre hint text and flash animation
+      const hintEl = document.getElementById('genre-hint-text');
+      const hintBox = document.getElementById('genre-hint-box');
+      if (hintEl && pill.dataset.hint) {
+        hintEl.textContent = `Tuned for: ${pill.dataset.hint}`;
       }
-      chip.classList.add('active-chip');
-      setTimeout(() => chip.classList.remove('active-chip'), 400);
-      showToast(`Preset loaded: ${chip.textContent.trim()}`, '⚡');
+      if (hintBox) {
+        hintBox.classList.remove('hint-flash');
+        void hintBox.offsetWidth; // trigger CSS reflow
+        hintBox.classList.add('hint-flash');
+      }
+
+      // Update input bar badge & button label
+      const firstSpan = pill.querySelector('span');
+      const genreName = firstSpan ? firstSpan.textContent.trim() : pill.textContent.trim();
+      const genreTag = document.getElementById('active-genre-tag');
+      if (genreTag) {
+        genreTag.textContent = genreName;
+      }
+
+      const btnText = document.getElementById('btn-submit-text');
+      if (btnText) {
+        btnText.textContent = `Generate ${genreName.split(' ')[1] || genreName} Clips`;
+      }
+
+      showToast(`AI tuned for ${genreName}`, '🎯');
     });
   });
 
@@ -189,7 +211,7 @@ async function handleIngestSubmit(e) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         url,
-        preset: 'streamer',
+        preset: selectedGenre,
         layout_mode: 'blur_bg',
         platform: 'instagram',
         target_clips: 4
@@ -197,20 +219,43 @@ async function handleIngestSubmit(e) {
     });
     const data = await res.json();
     document.getElementById('stream-url').value = '';
-    showToast(`Stream queued (Job #${data.job_id})`, '🚀');
+    showToast(`Queued with ${selectedGenre.toUpperCase()} tuning (Job #${data.job_id})`, '🚀');
     fetchJobs();
   } catch (err) {
     showToast(`Queue failed: ${err.message}`, '❌');
   } finally {
     if (btn) {
       btn.disabled = false;
+      const genreTag = document.getElementById('active-genre-tag');
+      const label = genreTag ? genreTag.textContent.trim() : 'Clips';
       btn.innerHTML = `
         <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
           <polygon points="5 3 19 12 5 21 5 3"></polygon>
         </svg>
-        <span>Generate Clips</span>
+        <span id="btn-submit-text">Generate ${label.split(' ')[1] || label} Clips</span>
       `;
     }
+  }
+}
+
+let cachedJobs = [];
+let selectedStreamFilter = 'all';
+let previousJobStatuses = {};
+
+function setupStreamFilterListener() {
+  const filterSelect = document.getElementById('stream-filter-select');
+  if (filterSelect && !filterSelect.dataset.listener) {
+    filterSelect.dataset.listener = 'true';
+    filterSelect.addEventListener('change', (e) => {
+      selectedStreamFilter = e.target.value;
+      renderJobsList(cachedJobs);
+      if (selectedStreamFilter !== 'all') {
+        const targetJob = cachedJobs.find(j => j.job_id === selectedStreamFilter);
+        if (targetJob && targetJob.clips && targetJob.clips.length > 0) {
+          selectClip(targetJob.job_id, targetJob.clips[0].clip_id);
+        }
+      }
+    });
   }
 }
 
@@ -218,41 +263,166 @@ async function fetchJobs() {
   try {
     const res = await fetch('/api/jobs');
     const jobs = await res.json();
+    
+    // Check for newly completed jobs to notify user and auto-select
+    jobs.forEach(job => {
+      const prev = previousJobStatuses[job.job_id];
+      if (prev && prev !== 'completed' && job.status === 'completed' && job.clips && job.clips.length > 0) {
+        showToast(`✨ Generated ${job.clips.length} highlights for "${job.title}"!`, '🎉');
+        selectedStreamFilter = job.job_id;
+      }
+      previousJobStatuses[job.job_id] = job.status;
+    });
+
+    cachedJobs = jobs;
+    setupStreamFilterListener();
+    renderActiveJobsBanner(jobs);
     renderJobsList(jobs);
   } catch (err) {
     console.error('Fetch jobs error:', err);
   }
 }
 
+let activePollingInterval = null;
+
+function renderActiveJobsBanner(jobs) {
+  const banner = document.getElementById('active-jobs-banner');
+  if (!banner) return;
+
+  const inProgress = jobs.filter(j => j.status && j.status !== 'completed' && j.status !== 'failed');
+  
+  // Adaptive fast polling (every 1.5s) while background work is happening
+  if (inProgress.length > 0 && !activePollingInterval) {
+    activePollingInterval = setInterval(fetchJobs, 1500);
+  } else if (inProgress.length === 0 && activePollingInterval) {
+    clearInterval(activePollingInterval);
+    activePollingInterval = null;
+  }
+
+  if (inProgress.length === 0) {
+    banner.classList.add('hidden');
+    banner.innerHTML = '';
+    return;
+  }
+
+  banner.classList.remove('hidden');
+  const stageLabels = {
+    queued: '⏳ [1/4] In queue, initializing...',
+    downloading: '⬇️ [1/4] Downloading source video stream...',
+    transcribing: '🎙️ [2/4] Transcribing speech (Whisper on CUDA)...',
+    analyzing: '🤖 [3/4] AI virality & hook scoring (Gemini)...',
+    rendering: '⚡ [4/4] Rendering 9:16 clips (NVIDIA NVENC)...'
+  };
+
+  let html = '';
+  inProgress.forEach(job => {
+    const statusText = stageLabels[job.status] || `🔄 Processing (${job.status})...`;
+    const pct = Math.max(5, Math.min(100, job.progress || 10));
+    html += `
+      <div class="processing-card">
+        <div class="processing-header">
+          <span class="processing-title" title="${escapeHtml(job.title || 'Video Stream')}">
+            <span class="spin-icon">⚙️</span> ${escapeHtml(job.title || 'Processing Stream...')}
+          </span>
+          <span class="processing-status-tag">${pct}%</span>
+        </div>
+        <div class="processing-bar-wrapper">
+          <div class="processing-bar-fill" style="width: ${pct}%;"></div>
+        </div>
+        <div class="processing-subtext">
+          <span>${statusText}</span>
+          <span>GPU Accelerated</span>
+        </div>
+      </div>
+    `;
+  });
+
+  banner.innerHTML = html;
+}
+
 function renderJobsList(jobs) {
   const container = document.getElementById('jobs-list');
   const countBadge = document.getElementById('job-count');
+  const filterSelect = document.getElementById('stream-filter-select');
 
   let allClips = [];
+  // Deduplicate jobs by title for the stream selector, keeping newest
+  const seenTitles = new Set();
+  const validJobs = [];
+
   jobs.forEach(job => {
     if (job.clips && job.clips.length > 0) {
       job.clips.forEach(clip => {
-        allClips.push({ ...clip, jobId: job.job_id, creator: job.creator });
+        allClips.push({ ...clip, jobId: job.job_id, creator: job.creator, streamTitle: job.title });
       });
+      if (!seenTitles.has(job.title)) {
+        seenTitles.add(job.title);
+        validJobs.push(job);
+      }
     }
   });
 
-  if (countBadge) countBadge.textContent = `${allClips.length}`;
+  // Populate stream switcher options
+  if (filterSelect) {
+    const currentVal = selectedStreamFilter;
+    let opts = `<option value="all">📁 All Video Highlights (${allClips.length})</option>`;
+    validJobs.forEach(job => {
+      const icon = (job.title || '').toLowerCase().includes('brighton') || (job.title || '').toLowerCase().includes('fulham') ? '⚽' : 
+                   ((job.title || '').toLowerCase().includes('dream') ? '🎮' : '📺');
+      opts += `<option value="${job.job_id}">${icon} ${escapeHtml(job.title)} (${job.clips.length})</option>`;
+    });
+    filterSelect.innerHTML = opts;
+    if (validJobs.some(j => j.job_id === currentVal) || currentVal === 'all') {
+      filterSelect.value = currentVal;
+    } else {
+      filterSelect.value = 'all';
+      selectedStreamFilter = 'all';
+    }
+  }
 
   if (allClips.length === 0) {
+    if (countBadge) countBadge.textContent = '0';
+    if (filterSelect) filterSelect.innerHTML = '<option value="all">📁 No Streams Loaded (0)</option>';
     container.innerHTML = `
       <div class="empty-clips">
         <span>🎬</span>
-        <p>No clips generated yet. Paste a stream URL above to begin.</p>
+        <p>No clips generated yet.<br>Paste a video link above and click Generate to start fresh.</p>
+      </div>`;
+    const video = document.getElementById('preview-video');
+    if (video) {
+      video.removeAttribute('src');
+      video.load();
+    }
+    const titleEl = document.getElementById('active-clip-title');
+    if (titleEl) titleEl.textContent = 'Clip Preview';
+    const metaEl = document.getElementById('active-clip-meta');
+    if (metaEl) metaEl.textContent = 'Paste a URL and choose a genre to begin';
+    activeClip = null;
+    activeJobId = null;
+    return;
+  }
+
+  const visibleClips = (selectedStreamFilter === 'all')
+    ? allClips
+    : allClips.filter(c => c.jobId === selectedStreamFilter);
+
+  if (countBadge) countBadge.textContent = `${visibleClips.length}`;
+
+  if (visibleClips.length === 0) {
+    container.innerHTML = `
+      <div class="empty-clips">
+        <span>🎬</span>
+        <p>No clips found for this video. Select another stream above.</p>
       </div>`;
     return;
   }
 
   let html = '';
-  allClips.forEach((clip, idx) => {
+  visibleClips.forEach((clip, idx) => {
     const isSelected = activeClip && activeClip.clip_id === clip.clip_id;
     const score = clip.virality_score || 90;
     const dur = Math.round(clip.duration || 35);
+    const streamTag = (clip.streamTitle || '').split('|')[0].split('·')[0].trim();
 
     html += `
       <div class="clip-card ${isSelected ? 'active' : ''}" onclick="selectClip('${clip.jobId}', '${clip.clip_id}')">
@@ -263,7 +433,7 @@ function renderJobsList(jobs) {
         <div class="clip-card-title">${escapeHtml(clip.title || `Clip #${idx + 1}`)}</div>
         <div class="clip-card-footer">
           <span>@${escapeHtml((clip.creator || 'streamer').toLowerCase().replace(/\s+/g, ''))}</span>
-          <span>${escapeHtml(clip.hook_type || 'Curiosity Gap')}</span>
+          <span class="clip-source-pill" title="${escapeHtml(clip.streamTitle || '')}">${escapeHtml(streamTag)}</span>
         </div>
       </div>
     `;
@@ -271,17 +441,23 @@ function renderJobsList(jobs) {
 
   container.innerHTML = html;
 
-  // Auto-select first clip if none selected
-  if (!activeClip && allClips.length > 0) {
-    selectClip(allClips[0].jobId, allClips[0].clip_id);
+  // Auto-select first clip if none selected or if active clip not in current view
+  if (visibleClips.length > 0) {
+    const isCurrentActiveVisible = activeClip && visibleClips.some(c => c.clip_id === activeClip.clip_id);
+    if (!activeClip || !isCurrentActiveVisible) {
+      selectClip(visibleClips[0].jobId, visibleClips[0].clip_id);
+    }
   }
 }
 
 window.selectClip = async function(jobId, clipId) {
   activeJobId = jobId;
   try {
-    const res = await fetch(`/api/jobs/${jobId}`);
-    const job = await res.json();
+    let job = cachedJobs.find(j => j.job_id === jobId);
+    if (!job) {
+      const res = await fetch(`/api/jobs/${jobId}`);
+      job = await res.json();
+    }
     const clip = job.clips.find(c => c.clip_id === clipId);
     if (!clip) return;
 
@@ -292,6 +468,7 @@ window.selectClip = async function(jobId, clipId) {
     if (video) {
       video.src = clip.video_url;
       video.load();
+      video.play().catch(() => {});
     }
 
     // Header metadata
@@ -300,7 +477,7 @@ window.selectClip = async function(jobId, clipId) {
 
     const metaEl = document.getElementById('active-clip-meta');
     if (metaEl) {
-      metaEl.textContent = `@${(job.creator || 'streamer').toLowerCase().replace(/\s+/g, '')} · ${clip.duration}s · ${clip.platform || 'Instagram Reels'}`;
+      metaEl.textContent = `${job.title} · @${(job.creator || 'streamer').toLowerCase().replace(/\s+/g, '')} · ${clip.duration}s`;
     }
 
     // Virality score

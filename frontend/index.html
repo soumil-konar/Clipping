@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/styles.css?v=3.0">
 </head>
 <body>
   <!-- Header Bar -->
@@ -31,13 +31,14 @@
         <div class="input-container">
           <span class="input-icon">🔗</span>
           <input type="url" id="stream-url" placeholder="Paste YouTube, Twitch, or Kick URL..." required autocomplete="off">
+          <span id="active-genre-tag" class="input-genre-tag">⚽ Sports</span>
           <button type="button" id="btn-paste" class="btn-icon-text" title="Paste from clipboard">Paste</button>
         </div>
         <button type="submit" id="btn-submit" class="btn btn-primary btn-generate">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
             <polygon points="5 3 19 12 5 21 5 3"></polygon>
           </svg>
-          <span>Generate Clips</span>
+          <span id="btn-submit-text">Generate Sports Clips</span>
         </button>
       </form>
     </div>
@@ -59,14 +60,36 @@
     </div>
   </header>
 
-  <!-- Quick Preset Bar (Minimal, clean, uncrowded) -->
-  <div class="preset-strip">
-    <span class="preset-strip-label">Quick Stream Presets:</span>
-    <div class="preset-chips">
-      <button type="button" class="demo-chip" data-url="https://www.youtube.com/watch?v=sample1" data-preset="streamer">🔥 Kai Cenat</button>
-      <button type="button" class="demo-chip" data-url="https://www.youtube.com/watch?v=sample2" data-preset="podcast">🎧 Joe Rogan</button>
-      <button type="button" class="demo-chip" data-url="https://www.youtube.com/watch?v=sample3" data-preset="gaming">🎮 Tarik Clutch</button>
-      <button type="button" class="demo-chip" data-url="https://www.youtube.com/watch?v=sample4" data-preset="streamer">⚡ Speed Live</button>
+  <!-- Content Genre & AI Tuning Bar -->
+  <div class="genre-strip">
+    <div class="genre-header-wrap">
+      <span class="genre-strip-label">AI Genre Tuning:</span>
+      <div class="genre-pills" id="genre-pills">
+        <button type="button" class="genre-pill active" data-genre="sports" data-hint="Goals, referee controversy & crowd roar peaks">
+          <span>⚽ Sports</span>
+          <span class="genre-pill-check">✓</span>
+        </button>
+        <button type="button" class="genre-pill" data-genre="gaming" data-hint="1vX clutches, sniper aces & chaotic comms">
+          <span>🎮 Gaming</span>
+          <span class="genre-pill-check">✓</span>
+        </button>
+        <button type="button" class="genre-pill" data-genre="standup" data-hint="Setup-to-punchline timing & audience laughter">
+          <span>🎭 Standup Comedy</span>
+          <span class="genre-pill-check">✓</span>
+        </button>
+        <button type="button" class="genre-pill" data-genre="podcast" data-hint="Mind-bending revelations & heated debates">
+          <span>🎙️ Podcast</span>
+          <span class="genre-pill-check">✓</span>
+        </button>
+        <button type="button" class="genre-pill" data-genre="streamer" data-hint="Creator freakouts, chat roasts & unscripted fails">
+          <span>🔥 Live Streamer</span>
+          <span class="genre-pill-check">✓</span>
+        </button>
+      </div>
+    </div>
+    <div id="genre-hint-box" class="genre-hint-badge">
+      <span class="genre-hint-dot"></span>
+      <span id="genre-hint-text">Tuned for: Goals, referee controversy & crowd roar peaks</span>
     </div>
   </div>
 
@@ -77,10 +100,21 @@
     <aside class="pane-sidebar">
       <div class="pane-header">
         <div class="pane-title-group">
-          <h3>Generated Clips</h3>
-          <span id="job-count" class="count-chip">4</span>
+          <h3>Clips</h3>
+          <span id="job-count" class="count-chip">0</span>
         </div>
       </div>
+
+      <!-- Stream Filter Switcher Dropdown -->
+      <div class="stream-switcher-box">
+        <label for="stream-filter-select" class="stream-select-label">Video Stream:</label>
+        <select id="stream-filter-select" class="clean-select stream-select">
+          <option value="all">📁 All Video Highlights</option>
+        </select>
+      </div>
+
+      <!-- Live Job Processing Banner -->
+      <div id="active-jobs-banner" class="active-jobs-container hidden"></div>
 
       <div id="jobs-list" class="clips-list">
         <!-- Rendered dynamically by app.js -->
@@ -293,6 +327,6 @@
   <!-- Toast Notification Container -->
   <div id="toast-container" class="toast-tray"></div>
 
-  <script src="/app.js"></script>
+  <script src="/app.js?v=3.0"></script>
 </body>
 </html>

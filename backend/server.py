@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 import shutil
 import uuid
@@ -11,7 +12,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
 from backend.config import (
-    BASE_DIR, DOWNLOADS_DIR, CLIPS_DIR, EXPORTS_DIR, STATIC_DIR,
+    BASE_DIR, STORAGE_DIR, DOWNLOADS_DIR, CLIPS_DIR, EXPORTS_DIR, STATIC_DIR,
     CUDA_AVAILABLE, DEFAULT_VIDEO_CODEC, PLATFORM_PROFILES
 )
 from backend.downloader import VideoDownloader
@@ -30,6 +31,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.middleware("http")
+async def add_no_cache_headers(request, call_next):
+    response = await call_next(request)
+    path = request.url.path
+    if path.endswith((".css", ".js", ".html")) or path == "/":
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
+
 # In-memory job state store
 jobs_db: Dict[str, Dict[str, Any]] = {}
 
@@ -47,7 +58,7 @@ def get_transcriber() -> Transcriber:
 
 class JobRequest(BaseModel):
     url: str
-    preset: str = "streamer"  # "streamer", "podcast", "gaming"
+    preset: str = "sports"  # "sports", "gaming", "standup", "podcast", "streamer"
     layout_mode: str = "blur_bg"  # "blur_bg", "smart_crop", "split_screen"
     platform: str = "instagram"  # "instagram", "tiktok", "youtube_shorts"
     target_clips: int = 4
@@ -62,6 +73,26 @@ class FineTuneRequest(BaseModel):
     subtitles_enabled: bool = True
     highlight_color: str = "&H00FFFF&"
 
+JOBS_DB_FILE = STORAGE_DIR / "jobs_db.json"
+
+def save_jobs_db():
+    try:
+        JOBS_DB_FILE.write_text(json.dumps(jobs_db, indent=2))
+    except Exception as e:
+        print(f"Warning: Failed to persist jobs_db: {e}")
+
+def load_jobs_db():
+    if JOBS_DB_FILE.exists():
+        try:
+            data = json.loads(JOBS_DB_FILE.read_text())
+            for k, v in data.items():
+                if v.get("status") not in ["completed", "failed"]:
+                    v["status"] = "failed"
+                    v["error"] = "Interrupted by server restart"
+                jobs_db[k] = v
+        except Exception as e:
+            print(f"Warning: Failed to load jobs_db: {e}")
+
 def process_clipping_job(job_id: str, req: JobRequest):
     """Background worker that executes the entire pipeline."""
     job = jobs_db[job_id]
@@ -69,6 +100,7 @@ def process_clipping_job(job_id: str, req: JobRequest):
         # Step 1: Download
         job["status"] = "downloading"
         job["progress"] = 15
+        save_jobs_db()
         dl_info = _downloader.download(req.url, job_id=job_id)
         job["title"] = dl_info["title"]
         job["creator"] = dl_info["uploader"]
@@ -76,19 +108,24 @@ def process_clipping_job(job_id: str, req: JobRequest):
         job["video_path"] = dl_info["video_path"]
         job["audio_path"] = dl_info["audio_path"]
         job["thumbnail"] = dl_info["thumbnail"]
+        save_jobs_db()
 
         # Step 2: Transcribe & Audio RMS
         job["status"] = "transcribing"
-        job["progress"] = 40
+        job["progress"] = 35
+        save_jobs_db()
         transcriber = get_transcriber()
         tr_result = transcriber.transcribe(Path(dl_info["audio_path"]))
         job["words"] = tr_result["words"]
         job["segments"] = tr_result["segments"]
         job["energy_timeline"] = tr_result["energy_timeline"]
+        job["progress"] = 55
+        save_jobs_db()
 
         # Step 3: Virality & Highlight Detection
         job["status"] = "analyzing"
-        job["progress"] = 70
+        job["progress"] = 65
+        save_jobs_db()
         api_key = req.gemini_api_key or os.environ.get("GEMINI_API_KEY")
         scorer = ViralityScorer(api_key=api_key)
         candidate_clips = scorer.score_clips(
@@ -102,7 +139,8 @@ def process_clipping_job(job_id: str, req: JobRequest):
 
         # Step 4: Render Candidate Clips in 9:16
         job["status"] = "rendering"
-        job["progress"] = 85
+        job["progress"] = 75
+        save_jobs_db()
         processed_clips = []
         for i, cand in enumerate(candidate_clips):
             clip_id = f"{job_id}_clip_{i+1}"
@@ -135,14 +173,18 @@ def process_clipping_job(job_id: str, req: JobRequest):
             cand["subtitles_enabled"] = True
             cand["exported"] = False
             processed_clips.append(cand)
+            job["progress"] = 75 + int((i + 1) / max(1, len(candidate_clips)) * 23)
+            save_jobs_db()
 
         job["clips"] = processed_clips
         job["status"] = "completed"
         job["progress"] = 100
+        save_jobs_db()
 
     except Exception as e:
         job["status"] = "failed"
         job["error"] = str(e)
+        save_jobs_db()
         print(f"Error processing job {job_id}: {e}")
 
 @app.get("/api/status")
@@ -168,6 +210,7 @@ def create_job(req: JobRequest, background_tasks: BackgroundTasks):
     job_id = str(uuid.uuid4())[:8]
     jobs_db[job_id] = {
         "job_id": job_id,
+        "id": job_id,
         "url": req.url,
         "status": "queued",
         "progress": 5,
@@ -177,91 +220,12 @@ def create_job(req: JobRequest, background_tasks: BackgroundTasks):
         "clips": [],
         "error": None
     }
+    save_jobs_db()
     background_tasks.add_task(process_clipping_job, job_id, req)
     return {"job_id": job_id, "status": "queued"}
 
 def init_demo_job_if_available():
-    clip1 = CLIPS_DIR / "c57817cb_clip_1.mp4"
-    if clip1.exists() and "c57817cb" not in jobs_db:
-        jobs_db["c57817cb"] = {
-            "job_id": "c57817cb",
-            "url": "https://www.youtube.com/watch?v=sample1",
-            "title": "Stream Highlights · Unhinged Moment (4K)",
-            "creator": "Kai Cenat Live",
-            "duration": 180,
-            "status": "completed",
-            "progress": 100,
-            "video_path": str(DOWNLOADS_DIR / "c57817cb.mp4"),
-            "audio_path": str(DOWNLOADS_DIR / "c57817cb.wav"),
-            "thumbnail": "",
-            "words": [],
-            "clips": [
-                {
-                    "clip_id": "c57817cb_clip_1",
-                    "title": "Wait Did He Really Just Say That? 💀",
-                    "description": "The entire chat went wild when this happened live on stream! Drop a comment if you saw it.",
-                    "hashtags": ["#kaicenat", "#twitchclips", "#reels", "#fyp", "#viral"],
-                    "start_time": 0.0,
-                    "end_time": 39.7,
-                    "duration": 39.7,
-                    "virality_score": 96,
-                    "hook_type": "Curiosity Gap",
-                    "retention_prediction": 94,
-                    "reason": "Extreme emotional peak with immediate hook, sustained conversational tension, and high comment incentive.",
-                    "layout_mode": "blur_bg",
-                    "platform": "instagram",
-                    "video_url": "/media/clips/c57817cb_clip_1.mp4"
-                },
-                {
-                    "clip_id": "c57817cb_clip_2",
-                    "title": "Uncontrollable Laughter at 3 AM 😂",
-                    "description": "You cannot make this up... watch his face at the end 😭 #streamerlife",
-                    "hashtags": ["#funny", "#streamer", "#hilarious", "#trending"],
-                    "start_time": 40.0,
-                    "end_time": 73.2,
-                    "duration": 33.2,
-                    "virality_score": 93,
-                    "hook_type": "Shock & Humor",
-                    "retention_prediction": 91,
-                    "reason": "Immediate laughter hook and high relatable comedic energy.",
-                    "layout_mode": "blur_bg",
-                    "platform": "instagram",
-                    "video_url": "/media/clips/c57817cb_clip_2.mp4"
-                },
-                {
-                    "clip_id": "c57817cb_clip_3",
-                    "title": "He Actually Predicted the Entire Match 🤯",
-                    "description": "5 seconds before it happened, he called every single move. Mind blown.",
-                    "hashtags": ["#gaming", "#prediction", "#clutch", "#epic"],
-                    "start_time": 80.0,
-                    "end_time": 115.1,
-                    "duration": 35.1,
-                    "virality_score": 91,
-                    "hook_type": "Story Escalation",
-                    "retention_prediction": 89,
-                    "reason": "High tension buildup leading to an explosive punchline and payoff.",
-                    "layout_mode": "blur_bg",
-                    "platform": "instagram",
-                    "video_url": "/media/clips/c57817cb_clip_3.mp4"
-                },
-                {
-                    "clip_id": "c57817cb_clip_4",
-                    "title": "Chat Convinced Him To Do The Impossible 🔥",
-                    "description": "Never doubt Twitch chat when they unite. What a moment.",
-                    "hashtags": ["#streamer", "#twitch", "#moment", "#viralclips"],
-                    "start_time": 120.0,
-                    "end_time": 153.5,
-                    "duration": 33.5,
-                    "virality_score": 88,
-                    "hook_type": "Community Challenge",
-                    "retention_prediction": 87,
-                    "reason": "Strong viewer identification and loopable ending.",
-                    "layout_mode": "blur_bg",
-                    "platform": "instagram",
-                    "video_url": "/media/clips/c57817cb_clip_4.mp4"
-                }
-            ]
-        }
+    load_jobs_db()
 
 @app.get("/api/jobs")
 def list_jobs():
@@ -332,6 +296,7 @@ def fine_tune_clip(clip_id: str, req: FineTuneRequest):
     clip["platform"] = req.platform
     clip["subtitles_enabled"] = req.subtitles_enabled
     clip["video_url"] = f"/media/clips/{rendered_video.name}?t={int(os.path.getmtime(rendered_video))}"
+    save_jobs_db()
 
     return {"status": "updated", "clip": clip}
 
